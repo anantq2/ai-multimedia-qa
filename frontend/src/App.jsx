@@ -1,14 +1,25 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
-import { Bot, FileWarning } from 'lucide-react';
+import { Bot, FileWarning, LogOut } from 'lucide-react';
 import FileUploader from './components/FileUploader';
 import SummaryPanel from './components/SummaryPanel';
 import MediaPlayer from './components/MediaPlayer';
 import ChatBox from './components/ChatBox';
+import AuthScreen from './components/AuthScreen';
 
 import * as api from './api';
 
 export default function App() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Check if user is already logged in on mount
+    const savedUser = localStorage.getItem('auth_user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+  }, []);
+
   const [fileState, setFileState] = useState({
     id: null,
     status: 'idle', // idle, uploading, processing, ready, error
@@ -96,32 +107,54 @@ export default function App() {
       return;
     }
 
-    // Attempt to parse out some local state to immediately show user the message
+    // Real-time chat streaming fallback (SSE)
     setMessages(prev => [...prev, { role: 'user', content: text }]);
     setIsChatLoading(true);
 
+    let currentAIResponse = '';
+    
+    // Add an empty AI message that we will stream into
+    setMessages(prev => [...prev, { role: 'ai', content: '', timestamp: null }]);
+
+    const updateLastMessage = (content, timestamp = null) => {
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        newMsgs[newMsgs.length - 1] = { role: 'ai', content, timestamp };
+        return newMsgs;
+      });
+    };
+
     try {
-      const res = await api.askQuestion(fileState.id, text);
-      
-      // If we don't have media url yet (FastAPI ask request returns it), set it
-      if (!fileState.url && res.media_url) {
-        setFileState(prev => ({ ...prev, url: res.media_url }));
-      }
-      
-      setMessages(prev => [...prev, { 
-        role: 'ai', 
-        content: res.answer,
-        timestamp: res.timestamp // Seconds if audio/video
-      }]);
+      await api.askQuestionStream(
+        fileState.id, 
+        text, 
+        // onToken
+        (tokenExtracted) => {
+          setIsChatLoading(false); // turn off loading spinner once first token arrives
+          currentAIResponse += tokenExtracted;
+          updateLastMessage(currentAIResponse);
+        },
+        // onDone
+        (metaContext) => {
+          setIsChatLoading(false);
+          updateLastMessage(currentAIResponse, metaContext.timestamp);
+          if (!fileState.url && metaContext.media_url) {
+            setFileState(prev => ({ ...prev, url: metaContext.media_url }));
+          }
+        },
+        // onError
+        (err) => {
+          console.error(err);
+          setIsChatLoading(false);
+          toast.error('Failed to get complete answer stream.');
+          updateLastMessage(currentAIResponse || "Sorry, I encountered an error streaming the response. Please try again.");
+        }
+      );
     } catch (err) {
       console.error(err);
-      toast.error('Failed to get an answer.');
-      setMessages(prev => [...prev, { 
-        role: 'ai', 
-        content: "Sorry, I encountered an error. Please try again."
-      }]);
-    } finally {
       setIsChatLoading(false);
+      toast.error('Failed to connect to chat.');
+      updateLastMessage("Sorry, I couldn't reach the server. Please check your connection.");
     }
   };
 
@@ -138,7 +171,10 @@ export default function App() {
       <Toaster position="top-right" toastOptions={{
         style: { background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }
       }}/>
-      
+
+      {!user ? (
+        <AuthScreen onAuthSuccess={setUser} />
+      ) : (
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem', height: '100vh' }}>
         
         {/* Header */}
@@ -149,6 +185,22 @@ export default function App() {
           <div>
             <h1 style={{ fontSize: '1.75rem', margin: 0, textShadow: '0 0 20px rgba(59,130,246,0.3)' }}>Anant <span style={{ color: 'var(--accent-primary)' }}>Q&A</span></h1>
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>AI-Powered Insight for Documents & Media</p>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>Hi, <strong style={{ color: 'var(--text-primary)' }}>{user.username}</strong></span>
+            <button 
+              onClick={() => {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user');
+                setUser(null);
+              }}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '0.5rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s'
+              }}
+            >
+              <LogOut size={16} /> Logout
+            </button>
           </div>
         </header>
 
@@ -206,6 +258,7 @@ export default function App() {
           </div>
         </main>
       </div>
+      )}
     </>
   );
 }
