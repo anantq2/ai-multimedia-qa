@@ -49,8 +49,16 @@ async def rate_limit_middleware(request: Request, call_next):
 
     # Identify caller: prefer username from auth, fall back to IP
     identifier = request.client.host or "unknown"
-    if hasattr(request.state, "user"):
-        identifier = request.state.user.get("username", identifier)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            from app.services.auth_service import decode_token
+            payload = decode_token(token)
+            if payload and payload.get("sub"):
+                identifier = payload.get("sub")
+        except Exception:
+            pass
 
     key = f"ratelimit:{identifier}"
     window = settings.RATE_LIMIT_WINDOW_SECONDS

@@ -54,9 +54,30 @@ async def upload_file(
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     save_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
 
-    # ── Chunked write (no RAM overflow) ────────────────────────────────────
-    with open(save_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # ── Chunked write with size enforcement ────────────────────────────────
+    max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    total_written = 0
+    try:
+        with open(save_path, "wb") as buffer:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1 MB chunks
+                if not chunk:
+                    break
+                total_written += len(chunk)
+                if total_written > max_bytes:
+                    buffer.close()
+                    os.remove(save_path)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum allowed size is {settings.MAX_FILE_SIZE_MB} MB.",
+                    )
+                buffer.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if os.path.exists(save_path):
+            os.remove(save_path)
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
     file_type = ALLOWED_TYPES[file.content_type]
     # URL the frontend media player can use to stream/play the file

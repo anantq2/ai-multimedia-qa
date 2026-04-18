@@ -6,86 +6,87 @@ import SummaryPanel from './components/SummaryPanel';
 import MediaPlayer from './components/MediaPlayer';
 import ChatBox from './components/ChatBox';
 import AuthScreen from './components/AuthScreen';
+import './App.css';
 
 import * as api from './api';
 
 export default function App() {
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    // Check if user is already logged in on mount
+  const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('auth_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-  }, []);
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
 
   const [fileState, setFileState] = useState({
     id: null,
-    status: 'idle', // idle, uploading, processing, ready, error
+    status: 'idle',
     type: null,
     name: null,
-    url: null
+    url: null,
   });
-  
+
   const [summary, setSummary] = useState(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
-  
+
   const [messages, setMessages] = useState([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
-  
-  const mediaRef = useRef(null);
 
-  // Handle file upload and start polling
+  const mediaRef = useRef(null);
+  const pollingIntervalRef = useRef(null); // Ref for interval cleanup
+  
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+    };
+  }, []);
+
   const handleUploadComplete = async (file) => {
     try {
-      setFileState(prev => ({ ...prev, status: 'uploading', name: file.name }));
-      
+      setSummary(null);
+      setMessages([]);
+      setFileState((prev) => ({ ...prev, status: 'uploading', name: file.name, url: null }));
+
       const res = await api.uploadFile(file);
       const newFileId = res.file_id;
-      
+
       setFileState({
         id: newFileId,
         status: 'processing',
         type: res.file_type,
         name: file.name,
-        url: null
+        url: null,
       });
-      
-      toast.success('File uploaded successfully! Processing started.', { icon: '🚀' });
-      
-      // Start polling for "ready" state
+
+      toast.success('File uploaded successfully! Processing started.');
       pollStatus(newFileId);
-      
     } catch (err) {
       console.error(err);
-      setFileState(prev => ({ ...prev, status: 'error' }));
+      setFileState((prev) => ({ ...prev, status: 'error' }));
       toast.error(err.response?.data?.detail || 'Failed to upload file.');
     }
   };
 
   const pollStatus = async (fileId) => {
-    const interval = setInterval(async () => {
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+
+    pollingIntervalRef.current = setInterval(async () => {
       try {
         const res = await api.checkStatus(fileId);
-        
+
         if (res.status === 'ready') {
-          clearInterval(interval);
-          setFileState(prev => ({ ...prev, status: 'ready' }));
+          clearInterval(pollingIntervalRef.current);
+          setFileState((prev) => ({ ...prev, status: 'ready' }));
           toast.success('File is ready! You can now ask questions.', { duration: 4000 });
-          
-          // Once ready, fetch the summary
           fetchSummary(fileId);
         } else if (res.status === 'error') {
-          clearInterval(interval);
-          setFileState(prev => ({ ...prev, status: 'error' }));
+          clearInterval(pollingIntervalRef.current);
+          setFileState((prev) => ({ ...prev, status: 'error' }));
           toast.error(res.error || 'Error processing the file. Please try again.');
         }
       } catch (err) {
-        clearInterval(interval);
-        console.error("Polling error", err);
+        clearInterval(pollingIntervalRef.current);
+        console.error('Polling error', err);
       }
-    }, 3000); // Check every 3 seconds
+    }, 3000);
   };
 
   const fetchSummary = async (fileId) => {
@@ -107,48 +108,43 @@ export default function App() {
       return;
     }
 
-    // Real-time chat streaming fallback (SSE)
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setMessages((prev) => [...prev, { role: 'user', content: text }]);
     setIsChatLoading(true);
 
     let currentAIResponse = '';
-    
-    // Add an empty AI message that we will stream into
-    setMessages(prev => [...prev, { role: 'ai', content: '', timestamp: null }]);
+
+    setMessages((prev) => [...prev, { role: 'ai', content: '', timestamp: null }]);
 
     const updateLastMessage = (content, timestamp = null) => {
-      setMessages(prev => {
-        const newMsgs = [...prev];
-        newMsgs[newMsgs.length - 1] = { role: 'ai', content, timestamp };
-        return newMsgs;
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        newMessages[newMessages.length - 1] = { role: 'ai', content, timestamp };
+        return newMessages;
       });
     };
 
     try {
       await api.askQuestionStream(
-        fileState.id, 
-        text, 
-        // onToken
+        fileState.id,
+        text,
         (tokenExtracted) => {
-          setIsChatLoading(false); // turn off loading spinner once first token arrives
+          setIsChatLoading(false);
           currentAIResponse += tokenExtracted;
           updateLastMessage(currentAIResponse);
         },
-        // onDone
         (metaContext) => {
           setIsChatLoading(false);
           updateLastMessage(currentAIResponse, metaContext.timestamp);
           if (!fileState.url && metaContext.media_url) {
-            setFileState(prev => ({ ...prev, url: metaContext.media_url }));
+            setFileState((prev) => ({ ...prev, url: metaContext.media_url }));
           }
         },
-        // onError
         (err) => {
           console.error(err);
           setIsChatLoading(false);
           toast.error('Failed to get complete answer stream.');
-          updateLastMessage(currentAIResponse || "Sorry, I encountered an error streaming the response. Please try again.");
-        }
+          updateLastMessage(currentAIResponse || 'Sorry, I encountered an error streaming the response. Please try again.');
+        },
       );
     } catch (err) {
       console.error(err);
@@ -168,96 +164,109 @@ export default function App() {
 
   return (
     <>
-      <Toaster position="top-right" toastOptions={{
-        style: { background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }
-      }}/>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: 'var(--bg-secondary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-light)',
+          },
+        }}
+      />
 
       {!user ? (
         <AuthScreen onAuthSuccess={setUser} />
       ) : (
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem', height: '100vh' }}>
-        
-        {/* Header */}
-        <header style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ background: 'var(--accent-glow)', padding: '0.75rem', borderRadius: 'var(--radius-lg)' }}>
-            <Bot size={28} color="var(--accent-primary)" />
-          </div>
-          <div>
-            <h1 style={{ fontSize: '1.75rem', margin: 0, textShadow: '0 0 20px rgba(59,130,246,0.3)' }}>Anant <span style={{ color: 'var(--accent-primary)' }}>Q&A</span></h1>
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>AI-Powered Insight for Documents & Media</p>
-          </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>Hi, <strong style={{ color: 'var(--text-primary)' }}>{user.username}</strong></span>
-            <button 
-              onClick={() => {
-                localStorage.removeItem('auth_token');
-                localStorage.removeItem('auth_user');
-                setUser(null);
-              }}
-              style={{
-                background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', border: '1px solid rgba(239, 68, 68, 0.3)',
-                padding: '0.5rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s'
-              }}
-            >
-              <LogOut size={16} /> Logout
-            </button>
-          </div>
-        </header>
-
-        {/* Main Interface */}
-        <main style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 350px) 1fr', gap: '2rem', flex: 1, minHeight: 0 }}>
-          
-          {/* Left Sidebar: Upload & Summary */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', height: '100%', overflowY: 'auto' }}>
-            <FileUploader 
-              onUploadComplete={handleUploadComplete} 
-              isUploading={['uploading', 'processing'].includes(fileState.status)} 
-            />
-            
-            {fileState.status === 'error' && (
-              <div className="glass-panel" style={{ padding: '1rem', display: 'flex', gap: '0.75rem', color: 'var(--error)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-                <FileWarning size={20} />
-                <p style={{ fontSize: '0.9rem' }}>There was an error processing your file. Please try a different one.</p>
-              </div>
-            )}
-            
-            <div style={{ flex: 1, minHeight: '300px' }}>
-              <SummaryPanel summary={summary} isLoading={isSummaryLoading || fileState.status === 'processing'} />
+        <div className="app-shell">
+          <header className="app-header glass-panel">
+            <div className="brand-mark">
+              <Bot size={30} color="var(--text-primary)" />
             </div>
-          </div>
 
-          {/* Right Main Area: Chat & Media Player */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', height: '100%', minHeight: 0 }}>
-            
-            {/* Show Media Player if it's Audio/Video and file is ready */}
-            {fileState.status === 'ready' && ['audio', 'video'].includes(fileState.type) && (
-              <div style={{ flexShrink: 0 }}>
-                 <MediaPlayer ref={mediaRef} fileUrl={fileState.url} fileType={fileState.type} fileName={fileState.name} />
-              </div>
-            )}
-            
-            {/* Chat Area */}
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              {fileState.status === 'idle' && (
-                <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-lg)' }}>
-                  <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-                    <h3 style={{ marginBottom: '0.5rem' }}>Awaiting File</h3>
-                    <p style={{ color: 'var(--text-muted)' }}>Upload a document or media file to start chatting.</p>
-                  </div>
+            <div className="brand-copy">
+             
+              <h1 className="app-title">
+                Anant <span>Q&amp;A</span>
+              </h1>
+              <p className="app-subtitle">AI-powered insights for documents, audio, and video with a cleaner reading experience.</p>
+            </div>
+
+            <div className="user-actions">
+              <span className="user-chip">
+                Hi, <strong>{user.username}</strong>
+              </span>
+
+              <button
+                className="logout-btn"
+                onClick={() => {
+                  localStorage.removeItem('auth_token');
+                  localStorage.removeItem('auth_user');
+                  setUser(null);
+                }}
+              >
+                <LogOut size={16} /> Logout
+              </button>
+            </div>
+          </header>
+
+          <main className="app-main">
+            <div className="app-sidebar">
+              <FileUploader onUploadComplete={handleUploadComplete} isUploading={['uploading', 'processing'].includes(fileState.status)} />
+
+              {fileState.status === 'error' && (
+                <div className="glass-panel error-banner">
+                  <FileWarning size={20} />
+                  <p style={{ fontSize: '0.9rem' }}>There was an error processing your file. Please try a different one.</p>
                 </div>
               )}
-              
-              <ChatBox 
-                messages={messages} 
-                onSendMessage={handleSendMessage} 
-                isLoading={isChatLoading || fileState.status === 'processing'}
-                onPlayTimestamp={handlePlayTimestamp}
-              />
+
+              <div className="app-summary-slot">
+                <SummaryPanel summary={summary} isLoading={isSummaryLoading || fileState.status === 'processing'} />
+              </div>
             </div>
-            
-          </div>
-        </main>
-      </div>
+
+            <div className="app-content">
+              {fileState.status === 'ready' && ['audio', 'video'].includes(fileState.type) && (
+                <div style={{ flexShrink: 0 }}>
+                  <MediaPlayer ref={mediaRef} fileUrl={fileState.url} fileType={fileState.type} fileName={fileState.name} />
+                </div>
+              )}
+
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                {fileState.status === 'idle' && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      zIndex: 10,
+                      background: 'rgba(15, 23, 42, 0.6)',
+                      backdropFilter: 'blur(4px)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 'var(--radius-lg)',
+                    }}
+                  >
+                    <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
+                      <h3 style={{ marginBottom: '0.5rem' }}>Awaiting File</h3>
+                      <p style={{ color: 'var(--text-muted)' }}>Upload a document or media file to start chatting.</p>
+                    </div>
+                  </div>
+                )}
+
+                <ChatBox
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  isLoading={isChatLoading || fileState.status === 'processing'}
+                  onPlayTimestamp={handlePlayTimestamp}
+                  fileName={fileState.name}
+                  isReady={fileState.status === 'ready'}
+                />
+              </div>
+            </div>
+          </main>
+        </div>
       )}
     </>
   );

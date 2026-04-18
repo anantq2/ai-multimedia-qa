@@ -10,6 +10,16 @@ from app.database import check_db_connection
 from app.routes import upload, chat, summary, auth
 from app.services.redis_service import rate_limit_middleware, get_redis
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    check_db_connection()
+    os.makedirs(settings.FAISS_DIR, exist_ok=True)
+    get_redis()  # Warm up Redis connection (non-blocking, won't crash if down)
+    print("Server started. Swagger docs at http://localhost:8000/docs")
+    yield
+
 # ── App ───────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="AI-Powered Document & Multimedia Q&A",
@@ -18,6 +28,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",        # Swagger UI at http://localhost:8000/docs
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # ── CORS (allow React dev server) ─────────────────────────────────────────
@@ -51,13 +62,7 @@ app.include_router(chat.router,    prefix="/api", tags=["Chat"])
 app.include_router(summary.router, prefix="/api", tags=["Summary"])
 
 
-# ── Startup ───────────────────────────────────────────────────────────────
-@app.on_event("startup")
-async def startup_event():
-    check_db_connection()
-    os.makedirs(settings.FAISS_DIR, exist_ok=True)
-    get_redis()  # Warm up Redis connection (non-blocking, won't crash if down)
-    print("Server started. Swagger docs at http://localhost:8000/docs")
+# Removed deprecated startup_event
 
 
 @app.get("/")

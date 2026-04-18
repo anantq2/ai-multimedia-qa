@@ -1,0 +1,40 @@
+# ── Environment / Secrets ─────────────────────────────────────────────────
+.env
+*.env
+.env.*
+!.env.example
+
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+venv/
+.venv/
+
+# ── Node ──────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+
+# ── Uploads & Indexes (runtime data) ─────────────────────────────────────
+uploads/
+faiss_indexes/
+
+# ── OS / Editor ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Logs ──────────────────────────────────────────────────────────────────
+*.log
+*.err

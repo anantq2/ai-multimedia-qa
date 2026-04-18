@@ -1,6 +1,6 @@
 from typing import Optional
-from datetime import datetime
-from pydantic import BaseModel
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
 
 
 # ── Stored in MongoDB: documents collection ──
@@ -12,7 +12,7 @@ class DocumentMeta(BaseModel):
     file_path: str
     media_url: str            # Static URL frontend can use to stream file
     status: str = "processing"   # processing | ready | error
-    created_at: datetime = datetime.utcnow()
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Stored in MongoDB: chunks collection ──
