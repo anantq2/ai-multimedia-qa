@@ -81,9 +81,10 @@ async def rate_limit_middleware(request: Request, call_next):
         request_count = results[2]
 
         if request_count > max_requests:
-            raise HTTPException(
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Rate limit exceeded. Max {max_requests} requests per {window}s. Try again shortly.",
+                content={"detail": f"Rate limit exceeded. Max {max_requests} requests per {window}s. Try again shortly."},
             )
 
         response = await call_next(request)
@@ -94,8 +95,6 @@ async def rate_limit_middleware(request: Request, call_next):
         response.headers["X-RateLimit-Reset"] = str(int(now + window))
         return response
 
-    except HTTPException:
-        raise  # Re-raise 429
     except Exception:
         # If Redis throws any error, let the request through
         return await call_next(request)
