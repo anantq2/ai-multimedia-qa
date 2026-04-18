@@ -65,6 +65,16 @@ services:
     networks:
       - app-network
 
+  # ── Redis (for rate limiting & caching) ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: aiqna-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
 # ── Named volumes ───────────────────────────────────────────────────────
 volumes:
   backend_uploads:

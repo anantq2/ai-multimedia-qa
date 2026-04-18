@@ -74,7 +74,7 @@ async def ask_stream(request: AskRequest, user: dict = Depends(get_current_user)
 
     if not relevant_chunks:
         # Even for "no results", stream the message via SSE for consistency
-        def empty_stream():
+        async def empty_stream():
             msg = "I couldn't find relevant information in the uploaded file."
             yield f"data: {json.dumps({'type': 'token', 'content': msg})}\n\n"
             meta = {
@@ -93,9 +93,9 @@ async def ask_stream(request: AskRequest, user: dict = Depends(get_current_user)
     if doc["file_type"] in ("audio", "video"):
         timestamp = relevant_chunks[0].get("start_time")
 
-    def event_generator():
+    async def event_generator():
         """Yield SSE events: token chunks → final 'done' event with metadata."""
-        for token in llm_service.answer_stream(request.question, relevant_chunks):
+        async for token in llm_service.answer_stream(request.question, relevant_chunks):
             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
         # Final event with metadata

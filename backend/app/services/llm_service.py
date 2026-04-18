@@ -23,6 +23,8 @@ Answer:"""
 )
 
 
+from typing import AsyncGenerator
+
 def answer(question: str, chunks: list[dict]) -> str:
     """Run the LangChain QA chain with retrieved chunks as context."""
     context = "\n\n---\n\n".join([c["text"] for c in chunks])
@@ -31,13 +33,13 @@ def answer(question: str, chunks: list[dict]) -> str:
     return result.content
 
 
-def answer_stream(question: str, chunks: list[dict]) -> Generator[str, None, None]:
+async def answer_stream(question: str, chunks: list[dict]) -> AsyncGenerator[str, None]:
     """
-    Stream the LLM response token-by-token.
+    Stream the LLM response token-by-token asynchronously.
     Yields content strings as they arrive from the model.
     """
     context = "\n\n---\n\n".join([c["text"] for c in chunks])
     chain = QA_PROMPT | llm
-    for chunk in chain.stream({"context": context, "question": question}):
+    async for chunk in chain.astream({"context": context, "question": question}):
         if hasattr(chunk, "content") and chunk.content:
             yield chunk.content
