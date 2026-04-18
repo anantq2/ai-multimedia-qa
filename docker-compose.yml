@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────────────────────
+#  AI-Powered Document & Multimedia Q&A — Docker Compose
+# ─────────────────────────────────────────────────────────────────────────
+#  Usage:
+#    docker compose up --build        # build & start all services
+#    docker compose up -d             # detached mode
+#    docker compose down              # stop everything
+#    docker compose logs -f backend   # tail backend logs
+# ─────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Backend (FastAPI + Whisper + FAISS) ────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aiqna-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Persist uploaded files and FAISS indexes across restarts
+      - backend_uploads:/app/uploads
+      - backend_faiss:/app/faiss_indexes
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - app-network
+
+  # ── Frontend (React → nginx) ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""   # empty = same origin, nginx proxies /api → backend
+    container_name: aiqna-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ── MongoDB (local dev — comment out if using MongoDB Atlas) ──────────
+  mongodb:
+    image: mongo:7
+    container_name: aiqna-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - app-network
+
+# ── Named volumes ───────────────────────────────────────────────────────
+volumes:
+  backend_uploads:
+  backend_faiss:
+  mongo_data:
+
+# ── Network ─────────────────────────────────────────────────────────────
+networks:
+  app-network:
+    driver: bridge

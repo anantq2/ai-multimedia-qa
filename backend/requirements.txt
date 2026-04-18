@@ -1,0 +1,41 @@
+fastapi==0.111.0
+uvicorn==0.30.0
+python-multipart==0.0.9
+pydantic-settings==2.2.1
+
+# Database
+pymongo
+
+# AI / LLM (newer versions support numpy 2.x and Python 3.13)
+langchain>=0.3.0
+langchain-google-genai
+
+# Vector search
+faiss-cpu==1.9.0.post1
+
+# PDF extraction
+PyMuPDF
+
+# Audio/Video transcription (install with --no-deps to avoid numpy conflict)
+# Run: pip install openai-whisper --no-deps && pip install tiktoken more-itertools
+openai-whisper
+
+# Testing
+pytest==8.2.0
+pytest-cov==5.0.0
+pytest-asyncio==0.23.7
+httpx==0.27.0
+
+# Static file serving
+aiofiles
+
+# ── Bonus: JWT Authentication ─────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.3
+
+# ── Bonus: Redis (rate-limiting + caching) ────────────────────────────────
+redis>=5.0.0
+
+# ── Bonus: SSE streaming ─────────────────────────────────────────────────
+sse-starlette>=2.0.0

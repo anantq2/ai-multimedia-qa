@@ -1,0 +1,10 @@
+MongoDB connected successfully!
+Server started. Swagger docs at http://localhost:8000/docs
+INFO:     127.0.0.1:61225 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62674 - "POST /api/upload HTTP/1.1" 200 OK
+Embedding 1 chunks for file_id=3a6acc16-19ad-40ee-82ae-04c716609053...
+FAISS index saved -> faiss_indexes\3a6acc16-19ad-40ee-82ae-04c716609053.index
+Success: 1 chunks stored in MongoDB for file_id=3a6acc16-19ad-40ee-82ae-04c716609053
+Success: File 3a6acc16-19ad-40ee-82ae-04c716609053 is ready.
+INFO:     127.0.0.1:63266 - "GET /api/status/3a6acc16-19ad-40ee-82ae-04c716609053 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54872 - "POST /api/upload HTTP/1.1" 200 OK
