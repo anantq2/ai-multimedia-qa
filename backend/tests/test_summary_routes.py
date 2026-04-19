@@ -30,7 +30,8 @@ class TestSummary:
         assert response.status_code == 400
         assert "not ready" in response.json()["detail"].lower()
 
-    def test_summary_no_chunks(self, client, auth_headers, pdf_doc):
+    @patch("app.routes.summary.cache_get", return_value=None)
+    def test_summary_no_chunks(self, mock_cache, client, auth_headers, pdf_doc):
         """File is ready but has no chunks — should 404."""
         response = client.post("/api/summary", json={"file_id": "pdf-001"},
                                headers=auth_headers)
